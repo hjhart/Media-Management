@@ -12,7 +12,7 @@
 # TODO: Get the project ported over to mechanize?
 
 # Debug mode changes no file names, just runs the tests to let you know what they WOULD change to
-@debug = false
+@debug = true
 # Log file
 @output_file = '/tmp/movie_rename_output.txt'
 
@@ -37,6 +37,15 @@ BLACKLIST_TERMS = [/\.avi$/,/\.mkv$/,/\.mp4$/,/\d{3,4}p/,/dvdrip/i,/ac3/,/eng/i,
 @failures = []
 @messages = []
 @successes = {}
+def self.initialize_mechanize()
+  require 'rubygems'
+  require 'mechanize'
+  
+  @agent = Mechanize.new { |a|
+     a.user_agent_alias = 'Mac Safari'
+     a.follow_meta_refresh = true
+  }
+end
 
 def self.initialize_watir()
   require 'rubygems'
@@ -90,6 +99,29 @@ def self.clean_name_for_search(filename)
   return filename
 end
 
+def self.fetch_movie_info(movie_title)
+   uri = "http://www.google.com/"
+   page = @agent.get(uri)
+
+   search_form = page.form_with(:name => "f")
+   search_form.field_with(:name => "q").value = movie_title
+   search_results = @agent.submit(search_form)
+
+   title = nil
+
+   search_results.links.each do |link|
+     if(link.href[/imdb\.com\/title\//])
+       movie_page = link.click
+       puts title = movie_page.title
+       if(title[/(.*)\(\d{4}\) - IMDb/])
+         break
+       end
+     end
+   end
+
+   return title
+end
+
 def self.im_feeling_lucky_search(filename)
   #TODO: URL parsing correctly.
   puts "Searching for #{filename}"
@@ -133,7 +165,8 @@ def self.process_file(filename, directory=nil)
     filename = clean_name_for_search(filename)
     
     # Search on Google to get the title name
-    rename_to = im_feeling_lucky_search(filename)
+    #rename_to = im_feeling_lucky_search(filename)
+    rename_to = fetch_movie_info(filename)
 
     if(rename_to)
       directory = File::SEPARATOR + directory rescue ""
@@ -167,11 +200,11 @@ end
 
 ## MAIN PROGRAM RUNS
 
-@b = initialize_watir()
-require 'cgi' # For URL encoding
+#@b = initialize_watir()
+#require 'cgi' # For URL encoding
 require 'ftools' # To rename files
 
-
+initialize_mechanize()
 
 d = Dir.new(ROOT_DIR)
 
