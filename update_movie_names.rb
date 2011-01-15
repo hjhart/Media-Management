@@ -16,22 +16,22 @@
 # Log file
 @output_file = '/tmp/movie_rename_output.txt'
 
-ROOT_DIR = "/Volumes/Media/Downloads"
+#ROOT_DIR = "/Volumes/Media/Downloads"
 #ROOT_DIR = "/Volumes/Media/Video/Movies"
-#ROOT_DIR = "/Users/jhart/Movies"
+ROOT_DIR = "/Users/jhart/Movies"
 #ROOT_DIR = "/Users/jhart/Sites/media_management/dummy"
-SUBSTITUTIONS = {/[\(\)\.-_\[\]\}\{]/=>' '} # Punctuation substitions for the movie title
+SUBSTITUTIONS = {/[\(\)\.\-_\[\]\}\{]/=>' '} # Punctuation substitions for the movie title
 MOVIE_FILE_EXTENSIONS = [/.avi$/, /.mkv$/, /.mp4$/] # Video extensions whose names will be changed - update if I missed some
 ILLEGAL_CHARACTERS = [ '/', /\n/, /\r/, /\t/, /\0/, /\f/, '`', '?', '*', '\\', '<', '>', '|', '\"', ':']
 BLACKLIST_TERMS = [/\.avi$/,/\.mkv$/,/\.mp4$/,/\d{3,4}p/,/dvdrip/i,/ac3/,/eng/i,/xvid/i,
-  /fxm/i,/fxg/i,/axxo/i,/ppvrip/i,/www\..*\.(com|org|net)/,/download/i,/iwanna/i,
-  /extratorrentrg/,/torrent/,/vice/i,/nydic/i,/maxspeed/i,/torentz/,/3xforum/,/usabit/,
-  /amiable/,/FxM/i,/aAF/i,/AFO/i,/AXIAL/i,/UNiVERSAL/i,/PFa/i,/SiRiUS/i,/Rets/i,
-  /BestDivX/i,/NeDiVx/i,/ESPiSE/i,/iMMORTALS/i,/QiM/i,/QuidaM/i,/COCAiN/i,/DOMiNO/i,
-  /JBW/i,/LRC/i,/WPi/i,/NTi/i,/SiNK/i,/HLS/i,/HNR/i,/iKA/i,/LPD/i,/DMT/i,/DvF/i,/IMBT/i,
-  /LMG/i,/DiAMOND/i,/D0PE/i,/NEPTUNE/i,/SAPHiRE/i,/PUKKA/i,/FiCO/i,/aXXo/i,/VoMiT/i,/ViTE/i,
-  /ALLiANCE/i,/mVs/i,/XanaX/i,/FLAiTE/i,/PREVAiL/i,/CAMERA/i,/VH-PROD/i,/BrG/i,/replica/i,
-  /FZERO/i,/multisub/,/fps/,/kbps/,/wunseedee/,/ppvrip/,/dvdscr/]
+  /fxm/,/fxg/,/axxo/,/ppvrip/,/www\..*\.(com|org|net)/,/download/i,/iwanna/i,
+  /extratorrentrg/,/torrent/,/vice/,/nydic/,/maxspeed/i,/torentz/,/3xforum/,/usabit/,
+  /amiable/,/FxM/,/aAF/,/AFO/,/AXIAL/,/UNiVERSAL/,/PFa/,/SiRiUS/,/Rets/,
+  /BestDivX/,/NeDiVx/,/ESPiSE/,/iMMORTALS/,/QiM/,/QuidaM/,/COCAiN/,/DOMiNO/,
+  /JBW/,/LRC/,/WPi/,/NTi/,/SiNK/,/HLS/,/HNR/,/iKA/,/LPD/,/DMT/,/DvF/,/IMBT/,
+  /LMG/,/DiAMOND/,/D0PE/,/NEPTUNE/,/SAPHiRE/,/PUKKA/,/FiCO/,/aXXo/,/VoMiT/,/ViTE/,
+  /ALLiANCE/,/mVs/,/XanaX/,/FLAiTE/,/PREVAiL/,/CAMERA/,/VH-PROD/,/BrG/,/replica/,
+  /FZERO/,/multisub/,/fps/,/kbps/,/wunseedee/,/ppvrip/,/dvdscr/]
   
 # Intialize the logging variables
 @failures = []
@@ -66,29 +66,39 @@ def self.movie_file?(filename)
     end
   end
   
+  if(filename[/s\d\de\d\d/i])
+    movie_file = false
+    @messages << "TV Show detected on #{filename}"
+  end
+  
   if(filename[/sample/i])
     movie_file = false
+    @messages << "Sample movie detected on #{filename}"
+    
   end
   
   return movie_file
 end
 
 def self.clean_name_for_search(filename)
-  
-  filename = filename.downcase
+  # remove the extension
+  filename = File.basename(filename, '.*')
   
   # Let's try removing everything after the 4 digit date
-  match = filename.scan /.*[\[\{\(]?\d{4}[\]\}\)]?/
+  match = filename[/.*[\[\{\(]?\d{4}[\]\}\)]?/]
+
   if(match)
     filename = match[0] unless !match[0].kind_of? String
     @messages << "Movie name possibly detected. #{filename}"
+  else 
+    @messages << "No movie name detected, blacklisting terms on #{filename}"
+    
+    BLACKLIST_TERMS.each { |term|
+      if(filename[term])
+        filename = filename.gsub(term, '')
+      end
+    }
   end
-  
-  BLACKLIST_TERMS.each { |term|
-    if(filename[term])
-      filename = filename.gsub(term, '')
-    end
-  }
   
   SUBSTITUTIONS.each do |k,v|
     if(filename[k])
@@ -96,15 +106,16 @@ def self.clean_name_for_search(filename)
     end
   end
   
-  return filename
+  filename
 end
 
 def self.fetch_movie_info(movie_title)
+  puts "Searching for " + movie_title
    uri = "http://www.google.com/"
    page = @agent.get(uri)
 
    search_form = page.form_with(:name => "f")
-   search_form.field_with(:name => "q").value = movie_title
+   search_form.field_with(:name => "q").value = movie_title + " site:imdb.com"
    search_results = @agent.submit(search_form)
 
    title = nil
@@ -112,8 +123,8 @@ def self.fetch_movie_info(movie_title)
    search_results.links.each do |link|
      if(link.href[/imdb\.com\/title\//])
        movie_page = link.click
-       puts title = movie_page.title
-       if(title[/(.*)\(\d{4}\) - IMDb/])
+       if(movie_page.title[/(.*)\(\d{4}\) - IMDb/])
+         title = movie_page.title[/(.*\(\d{4}\))/]
          break
        end
      end
